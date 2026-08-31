@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Docker configuration
-export DOCKER_WORKDIR="${HOME}/yocto-builds"
+export DOCKER_WORKDIR="${DOCKER_WORKDIR:-${HOME}/yocto-builds}"
 
 # Yocto build configuration
 export REMOTE="https://github.com/nxp-imx/imx-manifest"

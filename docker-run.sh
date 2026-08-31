@@ -33,6 +33,7 @@ echo "  Manifest: ${MANIFEST}"
 echo "  Machine:  ${MACHINE}"
 echo "  Distro:   ${DISTRO}"
 echo "  Images:   ${IMAGES}"
+echo "  Workdir:   ${DOCKER_WORKDIR}"
 echo ""
 
 # Build volume mount arguments for SSH and Git config if they exist

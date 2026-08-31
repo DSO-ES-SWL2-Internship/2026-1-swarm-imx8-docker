@@ -39,6 +39,9 @@ repo sync -j$(nproc)
 echo "Setting up build environment..."
 EULA=1 MACHINE="${MACHINE}" DISTRO="${DISTRO}" source imx-setup-release.sh -b build_${DISTRO}
 
+ls
+cp ../myconf/* conf/
+
 echo "Starting build..."
 bitbake ${IMAGES}
 

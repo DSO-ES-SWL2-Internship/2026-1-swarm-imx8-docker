@@ -1,49 +1,113 @@
 FROM ubuntu:24.04
 
-# Update system and add the packages required for Yocto builds.
-# Use DEBIAN_FRONTEND=noninteractive, to avoid image build hang waiting
-# for a default confirmation [Y/n] at some configurations.
-
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt update
-RUN apt install -y gawk wget git-core diffstat unzip texinfo \
-    gcc-multilib build-essential chrpath socat file cpio python3 \
-    python3-pip python3-pexpect xz-utils debianutils iputils-ping \
-    libsdl1.2-dev xterm tar locales net-tools rsync sudo vim curl zstd \
-    liblz4-tool libssl-dev bc lzop libgnutls28-dev efitools git-lfs
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
 
-# Set up locales
-RUN locale-gen en_US.UTF-8 && \
-    update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
-ENV LANG en_US.UTF-8
-ENV LC_ALL en_US.UTF-8
-
-# Yocto needs 'source' command for setting up the build environment, so replace
-# the 'sh' alias to 'bash' instead of 'dash'.
-RUN rm /bin/sh && ln -s bash /bin/sh
-
-# Install repo
-ADD https://storage.googleapis.com/git-repo-downloads/repo /usr/local/bin/
-RUN chmod 755 /usr/local/bin/repo
-
-# Add your user to sudoers to be able to install other packages in the container.
 ARG USER
-RUN echo "${USER} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${USER} && \
-    chmod 0440 /etc/sudoers.d/${USER}
-
-# Set the arguments for host_id and user_id to be able to save the build artifacts
-# outside the container, on host directories, as docker volumes.
-ARG host_uid \
-    host_gid
-RUN groupadd -g $host_gid nxp && \
-    useradd -g $host_gid -m -s /bin/bash -u $host_uid $USER
-
+ARG host_uid
+ARG host_gid
 ARG DOCKER_WORKDIR
-WORKDIR ${DOCKER_WORKDIR}
 
-# Copy yocto-build.sh into container
-COPY yocto-build.sh /usr/local/bin/yocto-build.sh
-RUN chmod +x /usr/local/bin/yocto-build.sh
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        bc \
+        build-essential \
+        ca-certificates \
+        chrpath \
+        cpio \
+        curl \
+        debianutils \
+        diffstat \
+        efitools \
+        file \
+        gawk \
+        gcc-multilib \
+        git \
+        git-lfs \
+        iputils-ping \
+        libacl1 \
+        libcrypt-dev \
+        libgnutls28-dev \
+        liblz4-tool \
+        libsdl1.2-dev \
+        libssl-dev \
+        locales \
+        lzop \
+        net-tools \
+        python3 \
+        python3-git \
+        python3-jinja2 \
+        python3-pexpect \
+        python3-pip \
+        python3-subunit \
+        rsync \
+        socat \
+        sudo \
+        tar \
+        texinfo \
+        unzip \
+        vim \
+        wget \
+        xterm \
+        xz-utils \
+        zstd && \
+    locale-gen en_US.UTF-8 && \
+    update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 && \
+    git lfs install --system && \
+    rm -rf /var/lib/apt/lists/*
 
-# Yocto builds should run as a normal user.
-USER $USER
+# Add the CA certificates to system trust store
+ADD https://artifactory.transfer.dso.org.sg/artifactory/dso-certs/DSOCA50.crt /usr/local/share/ca-certificates/
+ADD https://artifactory.transfer.dso.org.sg/artifactory/dso-certs/DSOCA60.crt /usr/local/share/ca-certificates/
+ADD https://artifactory.transfer.dso.org.sg/artifactory/dso-certs/DSOVisibilityCA.crt /usr/local/share/ca-certificates/
+
+# Update the trusted list of CAs
+RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates
+
+RUN set -eux; \
+    if getent group "${host_gid}" >/dev/null; then \
+        BUILD_GROUP="$(getent group "${host_gid}" | cut -d: -f1)"; \
+    else \
+        BUILD_GROUP="${USER}"; \
+        groupadd --gid "${host_gid}" "${BUILD_GROUP}"; \
+    fi; \
+    \
+    if getent passwd "${host_uid}" >/dev/null; then \
+        EXISTING_USER="$(getent passwd "${host_uid}" | cut -d: -f1)"; \
+        if [ "${EXISTING_USER}" != "${USER}" ]; then \
+            usermod \
+                --login "${USER}" \
+                --home "/home/${USER}" \
+                --move-home \
+                "${EXISTING_USER}"; \
+        fi; \
+        usermod --gid "${host_gid}" "${USER}"; \
+    else \
+        useradd \
+            --uid "${host_uid}" \
+            --gid "${host_gid}" \
+            --create-home \
+            --shell /bin/bash \
+            "${USER}"; \
+    fi; \
+    \
+    echo "${USER} ALL=(ALL) NOPASSWD:ALL" \
+        > "/etc/sudoers.d/${USER}"; \
+    chmod 0440 "/etc/sudoers.d/${USER}"
+
+RUN curl --fail --location --retry 5 \
+        https://storage.googleapis.com/git-repo-downloads/repo \
+        --output /usr/local/bin/repo && \
+    chmod 0755 /usr/local/bin/repo
+
+RUN mkdir -p "${DOCKER_WORKDIR}" && \
+    chown "${host_uid}:${host_gid}" "${DOCKER_WORKDIR}"
+
+WORKDIR "${DOCKER_WORKDIR}"
+
+COPY --chmod=0755 yocto-build.sh /usr/local/bin/yocto-build.sh
+
+USER ${USER}
+
+CMD ["/bin/bash"]
