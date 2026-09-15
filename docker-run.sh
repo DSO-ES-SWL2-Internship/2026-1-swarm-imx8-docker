@@ -48,7 +48,9 @@ if [ -f "${HOME}/.gitconfig" ]; then
 fi
 
 # Pass configuration as environment variables to container
+# Ensure that it is using the host's network proxy
 docker run -it --rm \
+    --network host \
     ${VOLUME_MOUNTS} \
     --env VERSION=${VERSION} \
     --env BRANCH=${BRANCH} \
